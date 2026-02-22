@@ -1,0 +1,12 @@
+[
+    {
+        "set_id": <id of the set>,
+        "set_name": <name of the set>,
+        "user_stories": <list of user stories>,
+        "links": <list of the linked set>,
+        "db": <if contains a db>
+    },
+    ...
+]
+
+
