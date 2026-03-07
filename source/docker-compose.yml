@@ -1,0 +1,110 @@
+services:
+  # ---------------------------------------------------------
+  # MARS SIMULATOR (provided by the instructor)
+  # ---------------------------------------------------------
+  simulator:
+    image: mars-iot-simulator:multiarch_v1
+    container_name: mars_simulator
+    ports:
+      - "8080:8080"
+    networks:
+      - aresguard_net
+    restart: always
+
+  # ---------------------------------------------------------
+  # MESSAGE BROKER (RabbitMQ)
+  # ---------------------------------------------------------
+  broker:
+    image: rabbitmq:3-management
+    container_name: aresguard_broker
+    ports:
+      - "5672:5672" # Port for AMQP communication (Ingestion -> Broker -> Services)
+      - "15672:15672" # Port for the Management Web UI
+    environment:
+      RABBITMQ_DEFAULT_USER: ares
+      RABBITMQ_DEFAULT_PASS: mars2036
+    networks:
+      - aresguard_net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------
+  # DATABASE (PostgreSQL)
+  # ---------------------------------------------------------
+  database:
+    image: postgres:15-alpine
+    container_name: aresguard_db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ares_admin
+      POSTGRES_PASSWORD: adminpassword
+      POSTGRES_DB: aresguard_db
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - aresguard_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ares_admin -d aresguard_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =========================================================
+  # CUSTOM MICROSERVICES (To be uncommented in the next steps)
+  # =========================================================
+  
+  # ingestion:
+  #   build: ./ingestion
+  #   container_name: aresguard_ingestion
+  #   depends_on:
+  #     broker:
+  #       condition: service_healthy
+  #     simulator:
+  #       condition: service_started
+  #   networks:
+  #     - aresguard_net
+
+  # rule_engine:
+  #   build: ./rule_engine
+  #   container_name: aresguard_rule_engine
+  #   depends_on:
+  #     broker:
+  #       condition: service_healthy
+  #     database:
+  #       condition: service_healthy
+  #   networks:
+  #     - aresguard_net
+
+  # api_gateway:
+  #   build: ./api_gateway
+  #   container_name: aresguard_api_gateway
+  #   ports:
+  #     - "8000:8000"
+  #   depends_on:
+  #     broker:
+  #       condition: service_healthy
+  #     database:
+  #       condition: service_healthy
+  #   networks:
+  #     - aresguard_net
+
+  # frontend:
+  #   build: ./frontend
+  #   container_name: aresguard_frontend
+  #   ports:
+  #     - "3000:80"
+  #   depends_on:
+  #     - api_gateway
+  #   networks:
+  #     - aresguard_net
+
+networks:
+  aresguard_net:
+    driver: bridge
+
+volumes:
+  pgdata: # Volume to persist DB data (Rules and Logs)
