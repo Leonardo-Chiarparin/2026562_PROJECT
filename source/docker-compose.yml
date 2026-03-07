@@ -40,19 +40,19 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: ares_admin
-      POSTGRES_PASSWORD: adminpassword
-      POSTGRES_DB: aresguard_db
+      POSTGRES_USER: ares
+      POSTGRES_PASSWORD: mars2036
+      POSTGRES_DB: aresguard
     volumes:
       - pgdata:/var/lib/postgresql/data
     networks:
       - aresguard_net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ares_admin -d aresguard_db"]
+      # FIX: Updated user and db name to match environment
+      test: ["CMD-SHELL", "pg_isready -U ares -d aresguard"]
       interval: 10s
       timeout: 5s
       retries: 5
-
   # =========================================================
   # CUSTOM MICROSERVICES (To be uncommented in the next steps)
   # =========================================================
@@ -72,44 +72,52 @@ services:
        - RABBITMQ_DEFAULT_USER=ares
        - RABBITMQ_DEFAULT_PASS=mars2036
 
-
-  # rule_engine:
-  #   build: ./rule_engine
-  #   container_name: aresguard_rule_engine
-  #   depends_on:
-  #     broker:
-  #       condition: service_healthy
-  #     database:
-  #       condition: service_healthy
-  #   networks:
-  #     - aresguard_net
-
-  api_gateway:
-    build: ./api_gateway
-    container_name: aresguard_api_gateway
-    ports:
-      - "8000:8000"
-    depends_on:
-      broker:
-        condition: service_healthy
-      database:
-        condition: service_healthy
-    networks:
-      - aresguard_net
+  rule_engine:
+    build: ./rule_engine
+    container_name: aresguard_rule_engine
     environment:
+      - PYTHONUNBUFFERED=1
       - BROKER_HOST=aresguard_broker
       - RABBITMQ_DEFAULT_USER=ares
       - RABBITMQ_DEFAULT_PASS=mars2036
+      - DATABASE_URL=host=aresguard_db dbname=aresguard user=ares password=mars2036
+      - SIMULATOR_URL=http://mars_simulator:8080/api/actuators
+    depends_on:
+      broker:      
+        condition: service_healthy
+      database:          
+        condition: service_healthy
+    networks:
+      - aresguard_net 
 
-  # frontend:
-  #   build: ./frontend
-  #   container_name: aresguard_frontend
-  #   ports:
-  #     - "3000:80"
-  #   depends_on:
-  #     - api_gateway
-  #   networks:
-  #     - aresguard_net
+  api_gateway:
+      build: ./api_gateway
+      container_name: aresguard_api_gateway
+      ports:
+        - "8000:8000"
+      depends_on:
+        broker:
+          condition: service_healthy
+        database:
+          condition: service_healthy
+      networks:
+        - aresguard_net
+      environment:
+        - PYTHONUNBUFFERED=1
+        - BROKER_HOST=aresguard_broker
+        - RABBITMQ_DEFAULT_USER=ares
+        - RABBITMQ_DEFAULT_PASS=mars2036
+        - SIMULATOR_URL=http://mars_simulator:8080/api/actuators
+
+  frontend:
+    build: ./frontend
+    container_name: aresguard_frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - api_gateway
+    networks:
+      - aresguard_net
 
 networks:
   aresguard_net:
