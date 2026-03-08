@@ -21,17 +21,17 @@
     </div>
 
     <header class="top-bar">
-        <h1>ARESGUARD: MISSION CONTROL</h1>
+        <h1 id="main-title">ARESGUARD: MISSION CONTROL</h1>
         <div style="display:flex; gap:15px; align-items:center;">
-            <select id="user-role" onchange="updateRole()" style="background:#1a1a1a; color:#fff; border:1px solid #333; padding:5px;">
-                <option value="specialist">Mission Specialist</option>
-                <option value="engineer">System Engineer</option>
-            </select>
+            <div class="role-switcher">
+                <button id="btn-role-specialist" class="role-btn active" onclick="setRole('specialist')">MISSION SPECIALIST</button>
+                <button id="btn-role-engineer" class="role-btn" onclick="setRole('engineer')">AUTOMATION ENGINEER</button>
+            </div>
             <span id="conn-status" style="font-size:12px; font-weight:bold; color:#f59e0b;">CONNECTING...</span>
         </div>
     </header>
 
-    <main>
+    <main id="specialist-view">
         <h3 class="section-title">ENVIRONMENTAL SENSORS:</h3>
         <section class="sensor-grid" id="sensor-grid"></section>
 
@@ -84,6 +84,57 @@
 
         <h3 class="section-title">SYSTEM EVENT LOGS:</h3>
         <div id="log-console"></div>
+    </main>
+
+    <main id="engineer-view" style="display: none;">
+        <h3 class="section-title">SENSORS (MINI TELEMETRY):</h3>
+        <section class="mini-sensor-grid" id="mini-sensor-grid"></section>
+
+        <h3 class="section-title">CREATE A NEW SAFETY RULE:</h3>
+        <section class="rule-creation-card">
+            <div class="rule-form">
+                <span style="color:#22c55e; font-weight:bold;">&gt; IF</span>
+                <select id="rule-sensor"></select>
+                <select id="rule-operator">
+                    <option value=">">&gt;</option>
+                    <option value=">=">&gt;=</option>
+                    <option value="<">&lt;</option>
+                    <option value="<=">&lt;=</option>
+                    <option value="==">==</option>
+                </select>
+                <input type="number" id="rule-value" placeholder="1000">
+                <span id="rule-unit" style="color:#555;">...</span>
+                <span style="color:#22c55e; font-weight:bold;">THEN SET</span>
+                <select id="rule-actuator"></select>
+                <span>to</span>
+                <select id="rule-action">
+                    <option value="ON">ON</option>
+                    <option value="OFF">OFF</option>
+                </select>
+            </div>
+            <div style="text-align: right; margin-top: 20px;">
+                <button class="btn-save" onclick="saveRule()">+ SAVE TO DB</button>
+            </div>
+        </section>
+
+        <h3 class="section-title">ACTIVE RULES DATABASE:</h3>
+        <section class="rules-table-container">
+            <table class="rules-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>CONDITION</th>
+                        <th>ACTION</th>
+                        <th>MANAGE</th>
+                    </tr>
+                </thead>
+                <tbody id="rules-tbody">
+                    </tbody>
+            </table>
+        </section>
+
+        <h3 class="section-title">REAL-TIME INGESTION LOG (NORMALIZED EVENTS):</h3>
+        <div id="raw-log-console"></div>
     </main>
 
     <script src="js/script.js"></script>
