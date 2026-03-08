@@ -2,22 +2,23 @@ const host = window.location.hostname;
 
 const ENDPOINTS = {
     WS: `ws://${host}:8000/ws`,
-    API: `http://${host}:8000/api/commands`
+    API: `http://${host}:8000/api/commands`,
+    SIMULATOR: `http://${host}:8080/api/sensors`
 };
 
 const SENSORS_REGISTRY = [
-    { id: 'greenhouse_temperature_value', label: 'Greenhouse Temp', unit: '°C', min: 0, max: 40 },
-    { id: 'entrance_humidity_value', label: 'Entrance Humidity', unit: '%', min: 0, max: 100 },
-    { id: 'co2_hall_value', label: 'CO2 Hall Level', unit: 'ppm', min: 400, max: 1000 },
-    { id: 'corridor_pressure_value', label: 'Corridor Pressure', unit: 'kPA', min: 90, max: 115 },
-    { id: 'water_tank_level_level_pct', label: 'Water Tank Level', unit: '%', min: 0, max: 100 },
-    { id: 'water_tank_level_level_liters', label: 'Water Tank Vol', unit: 'L', min: 0, max: 3000 },
-    { id: 'hydroponic_ph_ph', label: 'Hydroponic pH', unit: 'pH', min: 4.0, max: 9.0 },
-    { id: 'air_quality_pm25_pm25_ug_m3', label: 'PM 2.5 Level', unit: 'µg', min: 0, max: 50 },
-    { id: 'air_quality_pm25_pm1_ug_m3', label: 'PM 1.0 Level', unit: 'µg', min: 0, max: 30 },
-    { id: 'air_quality_pm25_pm10_ug_m3', label: 'PM 10 Level', unit: 'µg', min: 0, max: 60 },
-    { id: 'air_quality_voc_voc_ppb', label: 'Volatile Org. Comp', unit: 'ppb', min: 0, max: 600 },
-    { id: 'air_quality_voc_co2e_ppm', label: 'CO2 Equivalent', unit: 'ppm', min: 400, max: 1500 }
+    { id: 'greenhouse_temperature_value', simId: 'greenhouse_temperature', label: 'Greenhouse Temp', unit: '°C', min: 0, max: 40 },
+    { id: 'entrance_humidity_value', simId: 'entrance_humidity', label: 'Entrance Humidity', unit: '%', min: 0, max: 100 },
+    { id: 'co2_hall_value', simId: 'co2_hall', label: 'CO2 Hall Level', unit: 'ppm', min: 400, max: 1000 },
+    { id: 'corridor_pressure_value', simId: 'corridor_pressure', label: 'Corridor Pressure', unit: 'kPA', min: 90, max: 115 },
+    { id: 'water_tank_level_level_pct', simId: 'water_tank_level', label: 'Water Tank Level', unit: '%', min: 0, max: 100 },
+    { id: 'water_tank_level_level_liters', simId: 'water_tank_level', label: 'Water Tank Vol', unit: 'L', min: 0, max: 3000 },
+    { id: 'hydroponic_ph_ph', simId: 'hydroponic_ph', label: 'Hydroponic pH', unit: 'pH', min: 4.0, max: 9.0 },
+    { id: 'air_quality_pm25_pm25_ug_m3', simId: 'air_quality_pm25', label: 'PM 2.5 Level', unit: 'µg', min: 0, max: 50 },
+    { id: 'air_quality_pm25_pm1_ug_m3', simId: 'air_quality_pm25', label: 'PM 1.0 Level', unit: 'µg', min: 0, max: 30 },
+    { id: 'air_quality_pm25_pm10_ug_m3', simId: 'air_quality_pm25', label: 'PM 10 Level', unit: 'µg', min: 0, max: 60 },
+    { id: 'air_quality_voc_voc_ppb', simId: 'air_quality_voc', label: 'Volatile Org. Comp', unit: 'ppb', min: 0, max: 600 },
+    { id: 'air_quality_voc_co2e_ppm', simId: 'air_quality_voc', label: 'CO2 Equivalent', unit: 'ppm', min: 400, max: 1500 }
 ];
 
 const ACTUATOR_IDS = ['cooling_fan', 'habitat_heater', 'hall_ventilation', 'entrance_humidifier'];
@@ -25,10 +26,14 @@ const ACTUATOR_IDS = ['cooling_fan', 'habitat_heater', 'hall_ventilation', 'entr
 let systemState = {
     booted: false,
     sensorsReceived: new Set(),
-    actuators: {} 
+    actuators: {},
+    criticalSensors: new Set()
 };
 
+let bootStartTime;
+
 function initMissionControl() {
+    bootStartTime = Date.now();
     document.body.classList.add('no-scroll');
     renderGrid();
     connect();
@@ -60,6 +65,10 @@ function renderGrid() {
                     <p class="sensor-label">MIN: ${s.min}</p>
                     <p class="sensor-label">MAX: ${s.max}</p>
                 </div>
+                <div class="refresh-section">
+                    <span class="auto-refresh-label">● AUTO-REFRESH (5s)</span>
+                    <button class="refresh-btn" onclick="forceRefresh('${s.id}', event)">↻ FETCH</button>
+                </div>
             </div>
         </div>
     `).join('');
@@ -74,13 +83,11 @@ function connect() {
             statusEl.innerText = "ONLINE";
             statusEl.style.color = "#22c55e";
         }
-        addLog("Data Uplink Established.", "#22c55e");
     };
 
     socket.onmessage = (event) => {
         try {
             const msg = JSON.parse(event.data);
-            
             if (msg.type === "FULL_STATE") {
                 const items = Object.values(msg.data);
                 items.forEach((entry, index) => {
@@ -142,6 +149,16 @@ function updateSensor(id, val) {
         state = "CRITICAL";
         cssClass = "status-crit";
         isCrit = true;
+        
+        if (!systemState.criticalSensors.has(id)) {
+            systemState.criticalSensors.add(id);
+            addLog(`Critical Alarm: ${config.label} reads ${valStr} ${config.unit}.`, "#ef4444");
+        }
+    } else {
+        if (systemState.criticalSensors.has(id)) {
+            systemState.criticalSensors.delete(id);
+            addLog(`Recovery: ${config.label} returned to nominal parameters.`, "#22c55e");
+        }
     }
 
     if (statusEl) {
@@ -180,12 +197,54 @@ function syncActuator(id, rawState) {
         statusText.innerHTML = `STATUS: <span style="color: ${color}">${newState}</span>`;
     }
 
-    if (systemState.actuators[id] !== newState) {
+    if (systemState.actuators[id] !== newState && systemState.booted) {
         systemState.actuators[id] = newState;
         addLog(`System Confirmed: ${id} is ${newState}`, "#f59e0b");
+    } else {
+        systemState.actuators[id] = newState;
     }
 
     document.body.style.cursor = 'default';
+}
+
+async function forceRefresh(id, event) {
+    event.stopPropagation();
+    const config = SENSORS_REGISTRY.find(s => s.id === id);
+    if(!config || !config.simId) return;
+
+    const btn = event.currentTarget;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = "↻ FETCH";
+    btn.style.opacity = "0.5";
+
+    try {
+        const res = await fetch(`${ENDPOINTS.SIMULATOR}/${config.simId}`);
+        if (!res.ok) throw new Error("Net Error");
+        const data = await res.json();
+        
+        let val = 0;
+        if (data.measurements) {
+            const match = data.measurements.find(m => id.includes(m.name) || id.includes(m.metric));
+            if (match) val = match.value;
+            else val = data.measurements[0].value;
+        } else {
+            const exactKey = id.replace(config.simId + '_', ''); 
+            
+            if (data[exactKey] !== undefined) {
+                val = data[exactKey];
+            } else {
+                val = data.value || data.level || data.concentration || data.ph || 0;
+            }
+        }
+
+        updateSensor(id, val);
+        addLog(`Manual Fetch: ${config.label} reads ${val.toFixed(1)} ${config.unit}`, "#f59e0b");
+    } catch(e) {
+        addLog(`Error: Manual fetch for ${config.label} failed.`, "#ef4444");
+    } finally {
+        btn.innerHTML = originalText;
+        btn.style.opacity = "1";
+    }
 }
 
 async function manualToggle(id, isChecked) {
@@ -231,15 +290,21 @@ function checkBootSequence() {
 
     if (count >= 5) {
         systemState.booted = true;
-        const overlay = document.getElementById('boot-overlay');
-        if (overlay) {
-            overlay.style.opacity = '0';
-            setTimeout(() => { 
-                overlay.style.display = 'none'; 
-                document.body.classList.remove('no-scroll');
-                addLog("AresGuard Online. Mission Active.", "#22c55e");
-            }, 800);
-        }
+        
+        const elapsed = Date.now() - bootStartTime;
+        const remaining = Math.max(0, 2000 - elapsed);
+
+        setTimeout(() => {
+            const overlay = document.getElementById('boot-overlay');
+            if (overlay) {
+                overlay.style.opacity = '0';
+                setTimeout(() => { 
+                    overlay.style.display = 'none'; 
+                    document.body.classList.remove('no-scroll');
+                    addLog("AresGuard Online. Mission Active.", "#22c55e");
+                }, 800);
+            }
+        }, remaining);
     }
 }
 
